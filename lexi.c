@@ -95,13 +95,13 @@ struct templ {
 
 struct templ specials[16384] =
 {
-	{"switch", 1},
-	{"case", 2},
-	{"break", 0},
+	{"switch", 7},
+	{"case", 8},
+	{"break", 9},
 	{"struct", 3},
 	{"union", 3},
 	{"enum", 3},
-	{"default", 2},
+	{"default", 8},
 	{"int", 4},
 	{"char", 4},
 	{"float", 4},
@@ -115,14 +115,15 @@ struct templ specials[16384] =
 	{"global", 4},
 	{"extern", 4},
 	{"void", 4},
-	{"goto", 0},
-	{"return", 0},
+	{"goto", 9},
+	{"return", 9},
 	{"if", 5},
 	{"while", 5},
 	{"for", 5},
 	{"else", 6},
 	{"do", 6},
-	{"sizeof", 7},
+	{"sizeof", 2},
+	{"offsetof", 1},
 	{0, 0}
 };
 
@@ -262,8 +263,7 @@ lexi(void)
 			if (++buf_ptr >= buf_end)
 				fill_buffer();
 		}
-		ps.its_a_keyword = false;
-		ps.sizeof_keyword = false;
+		ps.keyword = 0;
 		if (l_struct) {	/* if last token was 'struct', then this token
 				 * should be treated as a declaration */
 			l_struct = false;
@@ -297,12 +297,12 @@ lexi(void)
 		}
 		if (p->rwd) {	/* we have a keyword */
 	found_keyword:
-			ps.its_a_keyword = true;
+			ps.keyword = p->rwcode;
 			ps.last_u_d = true;
 			switch (p->rwcode) {
-			case 1:/* it is a switch */
+			case 7:/* it is a switch */
 				return (swstmt);
-			case 2:/* a case or default */
+			case 8:/* a case or default */
 				return (casestmt);
 
 			case 3:/* a "struct" */
@@ -316,7 +316,11 @@ lexi(void)
 				 */
 			case 4:/* one of the declaration keywords */
 				if (ps.p_l_follow) {
-					ps.cast_mask |= 1 << ps.p_l_follow;
+					/* A type name following an lparen is a cast unless it's
+					 * a part of a function declarator, or an operand of the
+					 * sizeof operator, or an argument of the offsetof macro
+					 */
+					ps.cast_mask |= (1 << ps.p_l_follow & ~ps.not_cast_mask);
 					break;	/* inside parens: cast */
 				}
 				last_code = decl;
@@ -328,8 +332,6 @@ lexi(void)
 			case 6:/* do, else */
 				return (sp_nparen);
 
-			case 7:
-				ps.sizeof_keyword = true;
 			default:	/* all others are treated like any
 					 * other identifier */
 				return (ident);
@@ -357,7 +359,7 @@ lexi(void)
 		    && (ps.last_token == rparen || ps.last_token == semicolon ||
 			ps.last_token == decl ||
 			ps.last_token == lbrace || ps.last_token == rbrace)) {
-			ps.its_a_keyword = true;
+			ps.keyword = 4; /* a type name */
 			ps.last_u_d = true;
 			last_code = decl;
 			return decl;
